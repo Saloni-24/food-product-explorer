@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Product } from '@/types/product';
 import { getProductByBarcode } from '@/lib/api';
 import { useCart } from '@/context/CartContext';
+import Toast from '@/components/Toast';
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -14,6 +15,7 @@ export default function ProductDetailPage() {
   const code = params.code as string;
   const [product, setProduct] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [showToast, setShowToast] = useState<boolean>(false);
   const { addToCart } = useCart();
 
   useEffect(() => {
@@ -176,7 +178,10 @@ export default function ProductDetailPage() {
 
             {/* Add to Cart Button */}
             <button
-              onClick={() => addToCart(product)}
+              onClick={() => {
+                addToCart(product);
+                setShowToast(true);
+              }}
               className="w-full mt-6 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
             >
               Add to Cart
@@ -246,6 +251,14 @@ export default function ProductDetailPage() {
           </p>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      <Toast
+        message="Item added to cart"
+        isVisible={showToast}
+        onClose={() => setShowToast(false)}
+        duration={2500}
+      />
     </div>
   );
 }

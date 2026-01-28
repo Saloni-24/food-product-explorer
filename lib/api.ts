@@ -1,6 +1,7 @@
-import { Product, ProductResponse, ProductDetailResponse } from '@/types/product';
+import { Product, ProductResponse } from '@/types/product';
 
-const BASE_URL = 'https://world.openfoodfacts.org';
+// Use Next.js API routes to avoid CORS issues
+const API_BASE = '/api';
 
 export async function searchProductsByName(
   searchTerm: string,
@@ -9,8 +10,7 @@ export async function searchProductsByName(
 ): Promise<ProductResponse> {
   try {
     const response = await fetch(
-      `${BASE_URL}/cgi/search.pl?search_terms=${encodeURIComponent(searchTerm)}&page_size=${pageSize}&page=${page}&json=true`,
-      { next: { revalidate: 3600 } }
+      `${API_BASE}/products/search?q=${encodeURIComponent(searchTerm)}&page=${page}&pageSize=${pageSize}`
     );
     
     if (!response.ok) {
@@ -39,22 +39,17 @@ export async function searchProductsByName(
 
 export async function getProductByBarcode(barcode: string): Promise<Product | null> {
   try {
-    const response = await fetch(
-      `${BASE_URL}/api/v0/product/${barcode}.json`,
-      { next: { revalidate: 3600 } }
-    );
+    const response = await fetch(`${API_BASE}/products/barcode?code=${barcode}`);
     
     if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
       throw new Error('Failed to fetch product');
     }
     
-    const data: ProductDetailResponse = await response.json();
-    
-    if (data.status === 1 && data.product) {
-      return data.product;
-    }
-    
-    return null;
+    const data = await response.json();
+    return data;
   } catch (error) {
     console.error('Error fetching product by barcode:', error);
     return null;
@@ -68,8 +63,7 @@ export async function getProductsByCategory(
 ): Promise<ProductResponse> {
   try {
     const response = await fetch(
-      `${BASE_URL}/cgi/search.pl?tagtype_0=categories&tag_contains_0=contains&tag_0=${encodeURIComponent(category)}&page_size=${pageSize}&page=${page}&json=true`,
-      { next: { revalidate: 3600 } }
+      `${API_BASE}/products/category?category=${encodeURIComponent(category)}&page=${page}&pageSize=${pageSize}`
     );
     
     if (!response.ok) {
@@ -99,8 +93,7 @@ export async function getProductsByCategory(
 export async function getPopularProducts(page: number = 1, pageSize: number = 24): Promise<ProductResponse> {
   try {
     const response = await fetch(
-      `${BASE_URL}/cgi/search.pl?action=process&sort_by=popularity&page_size=${pageSize}&page=${page}&json=true`,
-      { next: { revalidate: 3600 } }
+      `${API_BASE}/products/popular?page=${page}&pageSize=${pageSize}`
     );
     
     if (!response.ok) {
@@ -129,18 +122,14 @@ export async function getPopularProducts(page: number = 1, pageSize: number = 24
 
 export async function getCategories(): Promise<string[]> {
   try {
-    const response = await fetch(
-      `${BASE_URL}/categories.json`,
-      { next: { revalidate: 86400 } }
-    );
+    const response = await fetch(`${API_BASE}/categories`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch categories');
     }
     
     const data = await response.json();
-    const categories = data.tags?.map((tag: any) => tag.name) || [];
-    return categories.slice(0, 50); // Limit to top 50 categories
+    return data || [];
   } catch (error) {
     console.error('Error fetching categories:', error);
     return [];

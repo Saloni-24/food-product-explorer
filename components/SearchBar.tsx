@@ -16,9 +16,14 @@ export default function SearchBar({ onSearch, placeholder = 'Search products...'
     onSearch(query.trim());
   };
 
+  const handleButtonClick = () => {
+    onSearch(query.trim());
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
-    if (searchType === 'name' && e.target.value.trim() === '') {
+    // Clear search when input is empty (for both name and barcode)
+    if (e.target.value.trim() === '') {
       onSearch('');
     }
   };
@@ -27,7 +32,7 @@ export default function SearchBar({ onSearch, placeholder = 'Search products...'
     <form onSubmit={handleSubmit} className="w-full">
       <div className="relative">
         <input
-          type={searchType === 'barcode' ? 'text' : 'text'}
+          type="text"
           value={query}
           onChange={handleChange}
           placeholder={placeholder}
@@ -48,14 +53,13 @@ export default function SearchBar({ onSearch, placeholder = 'Search products...'
             />
           </svg>
         </div>
-        {searchType === 'barcode' && (
-          <button
-            type="submit"
-            className="absolute inset-y-0 right-0 px-4 bg-blue-500 text-white rounded-r-lg hover:bg-blue-600 transition-colors"
-          >
-            Search
-          </button>
-        )}
+        <button
+          type="submit"
+          onClick={handleButtonClick}
+          className="absolute inset-y-0 right-0 px-4 bg-blue-500 text-white rounded-r-lg hover:bg-blue-600 transition-colors font-medium"
+        >
+          Search
+        </button>
       </div>
     </form>
   );

@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Product, SortOption } from '@/types/product';
 import { searchProductsByName, getProductByBarcode, getProductsByCategory, getPopularProducts, getCategories } from '@/lib/api';
 import ProductGrid from '@/components/ProductGrid';
-import SearchBar from '@/components/SearchBar';
+import UnifiedSearchBar from '@/components/UnifiedSearchBar';
 import CategoryFilter from '@/components/CategoryFilter';
 import SortDropdown from '@/components/SortDropdown';
 import LoadMoreButton from '@/components/LoadMoreButton';
 
+type FilterMode = 'barcode' | 'name' | 'category' | 'popular';
+
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
@@ -21,7 +22,14 @@ export default function HomePage() {
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
-  const [searchMode, setSearchMode] = useState<'popular' | 'search' | 'category' | 'barcode'>('popular');
+
+  // Determine the active filter mode based on priority: barcode > name > category > popular
+  const activeFilterMode = useMemo<FilterMode>(() => {
+    if (barcodeQuery.trim()) return 'barcode';
+    if (searchQuery.trim()) return 'name';
+    if (selectedCategory) return 'category';
+    return 'popular';
+  }, [barcodeQuery, searchQuery, selectedCategory]);
 
   // Load categories on mount
   useEffect(() => {
@@ -32,116 +40,121 @@ export default function HomePage() {
     loadCategories();
   }, []);
 
-  // Load initial products
+  // Fetch products when filters change
   useEffect(() => {
-    const loadInitialProducts = async () => {
+    const fetchProducts = async () => {
       setIsLoading(true);
-      const response = await getPopularProducts(1, 24);
-      setProducts(response.products);
       setCurrentPage(1);
-      setHasMore(response.page < response.page_count);
-      setIsLoading(false);
+
+      try {
+        let response;
+        
+        switch (activeFilterMode) {
+          case 'barcode':
+            if (barcodeQuery.trim()) {
+              const product = await getProductByBarcode(barcodeQuery.trim());
+              setProducts(product ? [product] : []);
+              setHasMore(false);
+            } else {
+              setProducts([]);
+              setHasMore(false);
+            }
+            setIsLoading(false);
+            return;
+
+          case 'name':
+            response = await searchProductsByName(searchQuery.trim(), 1, 24);
+            setProducts(response.products);
+            setCurrentPage(response.page);
+            setHasMore(response.page < response.page_count);
+            setIsLoading(false);
+            return;
+
+          case 'category':
+            response = await getProductsByCategory(selectedCategory, 1, 24);
+            setProducts(response.products);
+            setCurrentPage(response.page);
+            setHasMore(response.page < response.page_count);
+            setIsLoading(false);
+            return;
+
+          case 'popular':
+          default:
+            response = await getPopularProducts(1, 24);
+            setProducts(response.products);
+            setCurrentPage(response.page);
+            setHasMore(response.page < response.page_count);
+            setIsLoading(false);
+            return;
+        }
+      } catch (error) {
+        console.error('Error fetching products:', error);
+        setProducts([]);
+        setHasMore(false);
+        setIsLoading(false);
+      }
     };
-    loadInitialProducts();
-  }, []);
 
-  // Handle name search
-  const handleNameSearch = useCallback(async (query: string) => {
+    fetchProducts();
+  }, [activeFilterMode, barcodeQuery, searchQuery, selectedCategory]);
+
+  // Handle name search - works independently
+  const handleNameSearch = useCallback((query: string) => {
     setSearchQuery(query);
-    setBarcodeQuery('');
-    setSelectedCategory('');
     setCurrentPage(1);
-    
-    if (!query.trim()) {
-      setIsLoading(true);
-      const response = await getPopularProducts(1, 24);
-      setProducts(response.products);
-      setHasMore(response.page < response.page_count);
-      setSearchMode('popular');
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setSearchMode('search');
-    const response = await searchProductsByName(query, 1, 24);
-    setProducts(response.products);
-    setHasMore(response.page < response.page_count);
-    setIsLoading(false);
+    // Don't clear other filters - let them work independently
   }, []);
 
-  // Handle barcode search
-  const handleBarcodeSearch = useCallback(async (barcode: string) => {
-    if (!barcode.trim()) return;
-    
+  // Handle barcode search - works independently
+  const handleBarcodeSearch = useCallback((barcode: string) => {
     setBarcodeQuery(barcode);
-    setSearchQuery('');
-    setSelectedCategory('');
     setCurrentPage(1);
-    setIsLoading(true);
-    setSearchMode('barcode');
-    
-    const product = await getProductByBarcode(barcode);
-    if (product) {
-      setProducts([product]);
-      setHasMore(false);
-    } else {
-      setProducts([]);
-      setHasMore(false);
-    }
-    setIsLoading(false);
+    // Don't clear other filters - let them work independently
   }, []);
 
-  // Handle category filter
-  const handleCategoryChange = useCallback(async (category: string) => {
+  // Handle category filter - works independently
+  const handleCategoryChange = useCallback((category: string) => {
     setSelectedCategory(category);
-    setSearchQuery('');
-    setBarcodeQuery('');
     setCurrentPage(1);
-    
-    if (!category) {
-      setIsLoading(true);
-      const response = await getPopularProducts(1, 24);
-      setProducts(response.products);
-      setHasMore(response.page < response.page_count);
-      setSearchMode('popular');
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setSearchMode('category');
-    const response = await getProductsByCategory(category, 1, 24);
-    setProducts(response.products);
-    setHasMore(response.page < response.page_count);
-    setIsLoading(false);
+    // Don't clear other filters - let them work independently
   }, []);
 
-  // Load more products
+  // Load more products based on current active filter
   const handleLoadMore = useCallback(async () => {
-    if (isLoadingMore || !hasMore) return;
+    if (isLoadingMore || !hasMore || activeFilterMode === 'barcode') return;
 
     setIsLoadingMore(true);
     const nextPage = currentPage + 1;
-    
-    let response;
-    if (searchMode === 'search' && searchQuery) {
-      response = await searchProductsByName(searchQuery, nextPage, 24);
-    } else if (searchMode === 'category' && selectedCategory) {
-      response = await getProductsByCategory(selectedCategory, nextPage, 24);
-    } else {
-      response = await getPopularProducts(nextPage, 24);
+
+    try {
+      let response;
+      
+      switch (activeFilterMode) {
+        case 'name':
+          response = await searchProductsByName(searchQuery.trim(), nextPage, 24);
+          break;
+        case 'category':
+          response = await getProductsByCategory(selectedCategory, nextPage, 24);
+          break;
+        case 'popular':
+        default:
+          response = await getPopularProducts(nextPage, 24);
+          break;
+      }
+
+      setProducts((prev) => [...prev, ...response.products]);
+      setCurrentPage(response.page);
+      setHasMore(response.page < response.page_count);
+    } catch (error) {
+      console.error('Error loading more products:', error);
+    } finally {
+      setIsLoadingMore(false);
     }
+  }, [currentPage, hasMore, isLoadingMore, activeFilterMode, searchQuery, selectedCategory]);
 
-    setProducts((prev) => [...prev, ...response.products]);
-    setCurrentPage(nextPage);
-    setHasMore(response.page < response.page_count);
-    setIsLoadingMore(false);
-  }, [currentPage, hasMore, isLoadingMore, searchMode, searchQuery, selectedCategory]);
-
-  // Sort products
-  useEffect(() => {
-    const sorted = [...products].sort((a, b) => {
+  // Sort products - works on current displayed list
+  const sortedProducts = useMemo(() => {
+    return [...products].sort((a, b) => {
       switch (sortOption) {
         case 'name-asc':
           return (a.product_name || '').localeCompare(b.product_name || '');
@@ -163,7 +176,6 @@ export default function HomePage() {
           return 0;
       }
     });
-    setFilteredProducts(sorted);
   }, [products, sortOption]);
 
   return (
@@ -174,19 +186,11 @@ export default function HomePage() {
       </div>
 
       {/* Search Bars */}
-      <div className="mb-6 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Search by Product Name
-          </label>
-          <SearchBar onSearch={handleNameSearch} placeholder="Enter product name..." searchType="name" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Search by Barcode
-          </label>
-          <SearchBar onSearch={handleBarcodeSearch} placeholder="Enter barcode (e.g., 737628064502)..." searchType="barcode" />
-        </div>
+      <div className="mb-6">
+        <UnifiedSearchBar
+          onNameSearch={handleNameSearch}
+          onBarcodeSearch={handleBarcodeSearch}
+        />
       </div>
 
       {/* Filters */}
@@ -208,8 +212,8 @@ export default function HomePage() {
         </div>
       ) : (
         <>
-          <ProductGrid products={filteredProducts} />
-          {searchMode !== 'barcode' && (
+          <ProductGrid products={sortedProducts} />
+          {activeFilterMode !== 'barcode' && (
             <LoadMoreButton
               onClick={handleLoadMore}
               isLoading={isLoadingMore}
