@@ -1,9 +1,10 @@
 
 # Food Product Explorer
 
-[🌐 Live Demo](https://<your-vercel-project-url>.vercel.app)
+[🌐 Live Demo](https://food-product-explorer-ten.vercel.app)  
 
 Food Product Explorer is a web application that allows users to search, filter, and explore food products using the OpenFoodFacts API.
+
 
 
 ###  Features
